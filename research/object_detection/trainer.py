@@ -342,6 +342,11 @@ def train(create_tensor_dict_fn,
     global_summaries.add(
         tf.summary.scalar('Losses/TotalLoss', tf.losses.get_total_loss()))
 
+    #Burhan Debug Code for adding gradients to summary
+    for tensors in grads_and_vars:
+        # Tensor is a tuple. [0] is gradient, [1] is variable. Their names need not match
+        global_summaries.add(tf.summary.tensor_summary(name=tensors[0].op.name + 'VarName'+ tensors[1].name.replace(':0','__0'), tensor=tensors[0], summary_description=tensors[1].name))
+
     # Add the summaries from the first clone. These contain the summaries
     # created by model_fn and either optimize_clones() or _gather_clone_loss().
     summaries |= set(tf.get_collection(tf.GraphKeys.SUMMARIES,
