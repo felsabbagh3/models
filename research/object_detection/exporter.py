@@ -18,6 +18,9 @@ import logging
 import os
 import tempfile
 import tensorflow as tf
+import cPickle as pickle
+import gzip
+import numpy as np
 from google.protobuf import text_format
 from tensorflow.core.protobuf import saver_pb2
 from tensorflow.python import pywrap_tensorflow
@@ -44,7 +47,9 @@ def freeze_graph_with_def_protos(
     filename_tensor_name,
     clear_devices,
     initializer_nodes,
-    variable_names_blacklist=''):
+    variable_names_blacklist='',
+    prune=False,
+    prune_path=None):
   """Converts all variables in a graph and checkpoint into constants."""
   del restore_op_name, filename_tensor_name  # Unused by updated loading code.
 
@@ -89,6 +94,79 @@ def freeze_graph_with_def_protos(
 
       variable_names_blacklist = (variable_names_blacklist.split(',') if
                                   variable_names_blacklist else None)
+
+      # Burhan - Modify graph before this
+      if prune is True:
+          print "pruning graph"
+          pruning_ratio = 0.10
+          gradient_based = True
+          with gzip.GzipFile(prune_path,'rb') as fid:
+              grad_dict = pickle.loads(fid.read())
+          # Average out the gradients
+          for key,value in grad_dict.iteritems():
+              # Get weight values
+              tensor = sess.graph.get_tensor_by_name(value['varname'])
+              tensor_value = sess.run(tensor)
+
+              if "FeatureExtractor" not in value['varname']:
+                  continue
+
+              if gradient_based is True:
+                  # Average the gradient
+                  avg_grad = value['sum_grad']/value['count']
+                  if len(avg_grad.shape) == 4: # Conv Layer Pruning - Drop Entire Filters
+                      print "Conv Pruning"
+                      kW, kH, in_channels, out_channels =avg_grad.shape
+                      print value['varname']
+                      print avg_grad.shape
+                      avg_grad_sum_filters = np.sum(avg_grad,axis=(0,1,2))
+                      print avg_grad_sum_filters.shape
+                      # Sort the gradients
+                      avg_grad_sorted = np.sort(np.abs(avg_grad_sum_filters).flatten())
+                      # Get value corresponding to pruning ratio
+                      count = avg_grad_sorted.shape[0]
+                      threshold = avg_grad_sorted[int(count*pruning_ratio)]
+                      # Get mask
+                      value_mask = (np.abs(avg_grad_sum_filters) >= threshold) * 1
+                      # print value_mask[0]
+                      # print value_mask[100]
+                      # print value_mask[250]
+                      value_mask = value_mask[np.newaxis, np.newaxis, np.newaxis, :]
+                      value_mask = np.repeat(value_mask, [kW], axis=0)
+                      value_mask = np.repeat(value_mask, [kH], axis=1)
+                      value_mask = np.repeat(value_mask, [in_channels], axis=2)
+                      # print value_mask[:, :, 0, 0]
+                      # print value_mask[:, :, 100, 0]
+                      # print value_mask[:, :, 250, 0]
+                      # return
+                  elif len(avg_grad.shape) == 2: # Fully Connected - Pruning Synapses
+                      print "Fully Connected Pruning"
+                      print value['varname']
+                      print avg_grad.shape
+                      # Sort the gradients
+                      avg_grad_sorted = np.sort(np.abs(avg_grad).flatten())
+                      # Get value corresponding to pruning ratio
+                      count = avg_grad_sorted.shape[0]
+                      threshold = avg_grad_sorted[int(count*pruning_ratio)]
+                      # Get mask
+                      value_mask = (np.abs(avg_grad) >= threshold) * 1
+                  else:
+                      value_mask = np.ones(avg_grad.shape,dtype=np.float32)
+              else:
+                  tensor_value_sorted = np.sort(np.abs(tensor_value).flatten())
+                  count = tensor_value_sorted.shape[0]
+                  threshold = tensor_value_sorted[int(count*pruning_ratio)]
+                  value_mask = (np.abs(tensor_value) >= threshold) * 1
+
+              tensor_value_masked = value_mask * tensor_value
+              # Assign Masked Values
+              sess.run(tf.assign(tensor,tensor_value_masked))
+
+              # Double Check
+              tensor = sess.graph.get_tensor_by_name(value['varname'])
+              tensor_value = sess.run(tensor)
+              assert (tensor_value == tensor_value_masked).all()
+
       output_graph_def = graph_util.convert_variables_to_constants(
           sess,
           input_graph_def,
@@ -370,7 +448,9 @@ def _export_inference_graph(input_type,
                             additional_output_tensor_names=None,
                             input_shape=None,
                             output_collection_name='inference_op',
-                            graph_hook_fn=None):
+                            graph_hook_fn=None,
+                            prune=False,
+                            prune_path=None):
   """Export helper."""
   tf.gfile.MakeDirs(output_directory)
   frozen_graph_path = os.path.join(output_directory,
@@ -422,7 +502,9 @@ def _export_inference_graph(input_type,
       restore_op_name='save/restore_all',
       filename_tensor_name='save/Const:0',
       clear_devices=True,
-      initializer_nodes='')
+      initializer_nodes='',
+      prune=prune,
+      prune_path=prune_path)
   write_frozen_graph(frozen_graph_path, frozen_graph_def)
   write_saved_model(saved_model_path, frozen_graph_def,
                     placeholder_tensor, outputs)
@@ -434,7 +516,9 @@ def export_inference_graph(input_type,
                            output_directory,
                            input_shape=None,
                            output_collection_name='inference_op',
-                           additional_output_tensor_names=None):
+                           additional_output_tensor_names=None,
+                           prune=False,
+                           prune_path=None):
   """Exports inference graph for the model specified in the pipeline config.
 
   Args:
@@ -457,7 +541,9 @@ def export_inference_graph(input_type,
                           trained_checkpoint_prefix,
                           output_directory, additional_output_tensor_names,
                           input_shape, output_collection_name,
-                          graph_hook_fn=None)
+                          graph_hook_fn=None,
+                          prune=prune,
+                          prune_path=prune_path)
   pipeline_config.eval_config.use_moving_averages = False
   config_text = text_format.MessageToString(pipeline_config)
   with tf.gfile.Open(
