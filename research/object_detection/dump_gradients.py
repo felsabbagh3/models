@@ -5,6 +5,7 @@ import numpy as np
 import argparse
 import cPickle as pickle
 import gzip
+import glob
 
 
 def parse_args():
@@ -12,9 +13,9 @@ def parse_args():
     Parse input arguments
     """
     parser = argparse.ArgumentParser(description='Dump Gradients from Tensorflow Summaries')
-    parser.add_argument('--sum_file', dest='sum_file',
-                        help='Which Summary File to Load',
-                        default='mytrain/ssd_mobilenetv2_reducedcoco/train/events.out.tfevents.1527361362.greenhpc',
+    parser.add_argument('--eventDir', dest='eventDir',
+                        help='Directory containing event files',
+                        default='mytrain/ssd_mobilenetv2_reducedcoco/train/',
                         type=str)
     # parser.add_argument('--feedback', dest='feedback',
     #                     help='whether to apply feedback',
@@ -50,15 +51,11 @@ class ExceptionHandlingIterator(object):
                 pass
             return self.next()
 
-if __name__ == '__main__':
-    args = parse_args()
-    print 'Called with Args'
-    print args
-
-    path = args.sum_file
-    savepath = os.path.dirname(path) + '/gradients.gz'
-
-    grad_dict = {}
+def getGradDict(path, grad_dict):
+    if bool(grad_dict) is False:
+        print "Empty Dictionary"
+    else:
+        print "Appending to Existing Dictionary"
 
     summary_iterator = ExceptionHandlingIterator(tf.train.summary_iterator(path))
     for summary in summary_iterator:
@@ -87,6 +84,23 @@ if __name__ == '__main__':
 
                         grad_dict[gradient_tensor_name]['count'] += 1
                         grad_dict[gradient_tensor_name]['sum_grad'] = grad_dict[gradient_tensor_name]['sum_grad'] + grad
+
+    return grad_dict
+
+if __name__ == '__main__':
+    args = parse_args()
+    print 'Called with Args'
+    print args
+
+    path = args.eventDir
+    eventList = sorted(glob.glob(os.path.join(os.path.abspath(path),'events.out*')))
+
+    grad_dict = {}
+    savepath = os.path.dirname(path) + '/gradients.gz'
+
+    for path in eventList:
+        print "Fetching gradients from path: {}".format(path)
+        getGradDict(path, grad_dict)
 
     # Save the file with all the gradients
 

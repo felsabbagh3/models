@@ -95,6 +95,33 @@ def freeze_graph_with_def_protos(
       variable_names_blacklist = (variable_names_blacklist.split(',') if
                                   variable_names_blacklist else None)
 
+      mult_adds_before = 0
+      mult_adds_after = 0
+      params_before = 0
+      params_after = 0
+
+      in_channel_dict = {}
+
+      def parents(op):
+          return set(input.op for input in op.inputs)
+
+      def children(op):
+          return set(op for out in op.outputs for op in out.consumers())
+
+      def get_graph():
+          ops = tf.get_default_graph().get_operations()
+          return {op: children(op) for op in ops}
+
+      def print_tf_graph(graph):
+          for node in graph:
+              for child in graph[node]:
+                  print("%s -> %s" % (node.name, child.name))
+
+      child_graph = get_graph()
+      # print_tf_graph(child_graph)
+
+
+
       # Burhan - Modify graph before this
       if prune is True:
           print "pruning graph"
@@ -102,70 +129,95 @@ def freeze_graph_with_def_protos(
           gradient_based = True
           with gzip.GzipFile(prune_path,'rb') as fid:
               grad_dict = pickle.loads(fid.read())
-          # Average out the gradients
-          for key,value in grad_dict.iteritems():
-              # Get weight values
+
+          for key, value in grad_dict.iteritems():
               tensor = sess.graph.get_tensor_by_name(value['varname'])
-              tensor_value = sess.run(tensor)
+              print tensor.name
+              for node in child_graph:
+                  for child in child_graph[node]:
+                      print child.name
+                      if tensor.name == child.name:
+                          print tensor.name
+                          print node.name
+          return
 
-              if "FeatureExtractor" not in value['varname']:
-                  continue
+          # for key,value in grad_dict.iteritems():
+          #     # Get weight values
+          #     tensor = sess.graph.get_tensor_by_name(value['varname'])
+          #     tensor_value = sess.run(tensor)
+          #
+          #     if "FeatureExtractor" not in value['varname']:
+          #         continue
+          #
+          #     if gradient_based is True:
+          #         # Average the gradient
+          #         avg_grad = value['sum_grad']/value['count']
+          #         if len(avg_grad.shape) == 4: # Conv Layer Pruning - Drop Entire Filters
+          #             print "Conv Pruning"
+          #             kW, kH, in_channels, out_channels =avg_grad.shape
+          #             print value['varname']
+          #             print avg_grad.shape
+          #             avg_grad_sum_filters = np.sum(avg_grad,axis=(0,1,2))
+          #             print avg_grad_sum_filters.shape
+          #             # Sort the gradients
+          #             avg_grad_sorted = np.sort(np.abs(avg_grad_sum_filters).flatten())
+          #             # Get value corresponding to pruning ratio
+          #             count = avg_grad_sorted.shape[0]
+          #             threshold = avg_grad_sorted[int(count*pruning_ratio)]
+          #             # Get mask
+          #             value_mask_filters = (np.abs(avg_grad_sum_filters) >= threshold) * 1
+          #             # print value_mask[0]
+          #             # print value_mask[100]
+          #             # print value_mask[250]
+          #             value_mask = value_mask_filters[np.newaxis, np.newaxis, np.newaxis, :]
+          #             value_mask = np.repeat(value_mask, [kW], axis=0)
+          #             value_mask = np.repeat(value_mask, [kH], axis=1)
+          #             value_mask = np.repeat(value_mask, [in_channels], axis=2)
+          #
+          #             params_layer_before = kW * kH * in_channels * out_channels
+          #             params_layer_after = kW * kH * in_channels * np.sum(value_mask_filters)
+          #
+          #
+          #
+          #             # print value_mask[:, :, 0, 0]
+          #             # print value_mask[:, :, 100, 0]
+          #             # print value_mask[:, :, 250, 0]
+          #             # return
+          #         elif len(avg_grad.shape) == 2: # Fully Connected - Pruning Synapses
+          #             print "Fully Connected Pruning"
+          #             print value['varname']
+          #             print avg_grad.shape
+          #             # Sort the gradients
+          #             avg_grad_sorted = np.sort(np.abs(avg_grad).flatten())
+          #             # Get value corresponding to pruning ratio
+          #             count = avg_grad_sorted.shape[0]
+          #             threshold = avg_grad_sorted[int(count*pruning_ratio)]
+          #             # Get mask
+          #             value_mask = (np.abs(avg_grad) >= threshold) * 1
+          #         else:
+          #             value_mask = np.ones(avg_grad.shape,dtype=np.float32)
+          #             params_layer_before = avg_grad.shape[0]
+          #             params_layer_after = avg_grad.shape[0]
+          #     else:
+          #         tensor_value_sorted = np.sort(np.abs(tensor_value).flatten())
+          #         count = tensor_value_sorted.shape[0]
+          #         threshold = tensor_value_sorted[int(count*pruning_ratio)]
+          #         value_mask = (np.abs(tensor_value) >= threshold) * 1
+          #
+          #     tensor_value_masked = value_mask * tensor_value
+          #     # Assign Masked Values
+          #     sess.run(tf.assign(tensor,tensor_value_masked))
+          #
+          #     # Double Check
+          #     tensor = sess.graph.get_tensor_by_name(value['varname'])
+          #     tensor_value = sess.run(tensor)
+          #     assert (tensor_value == tensor_value_masked).all()
+          #
+          #     params_before += params_layer_before
+          #     params_after += params_layer_after
 
-              if gradient_based is True:
-                  # Average the gradient
-                  avg_grad = value['sum_grad']/value['count']
-                  if len(avg_grad.shape) == 4: # Conv Layer Pruning - Drop Entire Filters
-                      print "Conv Pruning"
-                      kW, kH, in_channels, out_channels =avg_grad.shape
-                      print value['varname']
-                      print avg_grad.shape
-                      avg_grad_sum_filters = np.sum(avg_grad,axis=(0,1,2))
-                      print avg_grad_sum_filters.shape
-                      # Sort the gradients
-                      avg_grad_sorted = np.sort(np.abs(avg_grad_sum_filters).flatten())
-                      # Get value corresponding to pruning ratio
-                      count = avg_grad_sorted.shape[0]
-                      threshold = avg_grad_sorted[int(count*pruning_ratio)]
-                      # Get mask
-                      value_mask = (np.abs(avg_grad_sum_filters) >= threshold) * 1
-                      # print value_mask[0]
-                      # print value_mask[100]
-                      # print value_mask[250]
-                      value_mask = value_mask[np.newaxis, np.newaxis, np.newaxis, :]
-                      value_mask = np.repeat(value_mask, [kW], axis=0)
-                      value_mask = np.repeat(value_mask, [kH], axis=1)
-                      value_mask = np.repeat(value_mask, [in_channels], axis=2)
-                      # print value_mask[:, :, 0, 0]
-                      # print value_mask[:, :, 100, 0]
-                      # print value_mask[:, :, 250, 0]
-                      # return
-                  elif len(avg_grad.shape) == 2: # Fully Connected - Pruning Synapses
-                      print "Fully Connected Pruning"
-                      print value['varname']
-                      print avg_grad.shape
-                      # Sort the gradients
-                      avg_grad_sorted = np.sort(np.abs(avg_grad).flatten())
-                      # Get value corresponding to pruning ratio
-                      count = avg_grad_sorted.shape[0]
-                      threshold = avg_grad_sorted[int(count*pruning_ratio)]
-                      # Get mask
-                      value_mask = (np.abs(avg_grad) >= threshold) * 1
-                  else:
-                      value_mask = np.ones(avg_grad.shape,dtype=np.float32)
-              else:
-                  tensor_value_sorted = np.sort(np.abs(tensor_value).flatten())
-                  count = tensor_value_sorted.shape[0]
-                  threshold = tensor_value_sorted[int(count*pruning_ratio)]
-                  value_mask = (np.abs(tensor_value) >= threshold) * 1
-
-              tensor_value_masked = value_mask * tensor_value
-              # Assign Masked Values
-              sess.run(tf.assign(tensor,tensor_value_masked))
-
-              # Double Check
-              tensor = sess.graph.get_tensor_by_name(value['varname'])
-              tensor_value = sess.run(tensor)
-              assert (tensor_value == tensor_value_masked).all()
+      # print params_before
+      # print params_after
 
       output_graph_def = graph_util.convert_variables_to_constants(
           sess,
