@@ -202,7 +202,7 @@ def _create_losses(input_queue, create_model_fn, train_config):
     tf.losses.add_loss(loss_tensor)
 
 
-def train(create_tensor_dict_fn,
+def saveNewGraph(create_tensor_dict_fn,
           create_model_fn,
           train_config,
           master,
@@ -388,30 +388,36 @@ def train(create_tensor_dict_fn,
         init_saver.restore(sess, train_config.fine_tune_checkpoint)
       init_fn = initializer_fn
 
-      print vars_incompatible_shapes
+      incompatible_shapes_assign_ops = []
+      for var_name, var in vars_incompatible_shapes.iteritems():
+          slice_inds = tuple(slice(0,osi) for osi in var['tensor'].shape)
+          temp_op = tf.assign(ref=var['tensor'], value=var['value'][slice_inds])
+          incompatible_shapes_assign_ops.append(temp_op)
 
-      # incompatible_shapes_assign_ops = []
-      # for var_name, var in vars_incompatible_shapes.iteritems():
-      #     slice_inds = tuple(slice(0,osi) for osi in var['tensor'].shape)
-      #     temp_op = tf.assign(ref=var['tensor'], value=var['value'][slice_inds])
-      #     incompatible_shapes_assign_ops.append(temp_op)
-
-      # exit()
       # with tf.Session(config=session_config) as sess:
       #   sess.run(tf.global_variables_initializer())
       #   sess.run(incompatible_shapes_assign_ops)
     print "HERE"
-    slim.learning.train(
-        train_tensor,
-        logdir=train_dir,
-        master=master,
-        is_chief=is_chief,
-        session_config=session_config,
-        startup_delay_steps=train_config.startup_delay_steps,
-        init_fn=init_fn,
-        summary_op=summary_op,
-        number_of_steps=(
-            train_config.num_steps if train_config.num_steps else None),
-        save_summaries_secs=120,
-        sync_optimizer=sync_optimizer,
-        saver=saver)
+
+    new_saver = tf.train.Saver()
+    with tf.Session(config=session_config) as sess:
+        print "Running Init Function"
+        sess.run(tf.global_variables_initializer())
+        init_fn(sess)
+        sess.run(incompatible_shapes_assign_ops)
+        new_saver.save(sess,train_dir+'model.ckpt')
+        # saver.save(sess,train_dir)
+    # slim.learning.train(
+    #     train_tensor,
+    #     logdir=train_dir,
+    #     master=master,
+    #     is_chief=is_chief,
+    #     session_config=session_config,
+    #     startup_delay_steps=train_config.startup_delay_steps,
+    #     init_fn=init_fn,
+    #     summary_op=summary_op,
+    #     number_of_steps=(
+    #         train_config.num_steps if train_config.num_steps else None),
+    #     save_summaries_secs=120,
+    #     sync_optimizer=sync_optimizer,
+    #     saver=saver)

@@ -857,13 +857,22 @@ class SSDMetaArch(model.DetectionModel):
       var_name = variable.op.name
       if (fine_tune_checkpoint_type == 'detection' and
           load_all_detection_checkpoint_vars):
+        # print "SSDMetaArch: RestoreMap(): Restoring All Detection Checkpoint Variables"
         variables_to_restore[var_name] = variable
       else:
+        # print "SSDMetaArch: RestoreMap(): Restoring All Classification Checkpoint Variables"
         if var_name.startswith(self._extract_features_scope):
           if fine_tune_checkpoint_type == 'classification':
             var_name = (
                 re.split('^' + self._extract_features_scope + '/',
                          var_name)[-1])
           variables_to_restore[var_name] = variable
+
+    # out_tensor = variables_to_restore['BoxPredictor_0/ClassPredictor/weights']
+    # print out_tensor
+    # exit()
+    # for variables in variables_to_restore:
+    #     print variables
+    # exit()
 
     return variables_to_restore

@@ -95,3 +95,4 @@ ENV/
 *_pb2.py
 research/object_detection/data/*
 research/object_detection/mytrain/*
+*.result

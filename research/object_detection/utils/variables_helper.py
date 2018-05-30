@@ -128,6 +128,7 @@ def get_variables_available_in_checkpoint(variables,
   if not include_global_step:
     ckpt_vars_to_shape_map.pop(tf.GraphKeys.GLOBAL_STEP, None)
   vars_in_ckpt = {}
+  vars_incompatible_shapes = {}
   for variable_name, variable in sorted(variable_names_map.items()):
     if variable_name in ckpt_vars_to_shape_map:
       if ckpt_vars_to_shape_map[variable_name] == variable.shape.as_list():
@@ -136,9 +137,18 @@ def get_variables_available_in_checkpoint(variables,
         logging.warning('Variable [%s] is available in checkpoint, but has an '
                         'incompatible shape with model variable.',
                         variable_name)
+        # print variable
+        # print variable_name
+        # print ckpt_vars_to_shape_map[variable_name]
+
+        value = ckpt_reader.get_tensor(variable_name)
+        print variable
+        print value.shape
+        vars_incompatible_shapes[variable_name] = {'tensor': variable, 'value': value}
     else:
-      logging.warning('Variable [%s] is not available in checkpoint',
-                      variable_name)
+      continue
+      # logging.warning('Variable [%s] is not available in checkpoint',
+      #                 variable_name)
   if isinstance(variables, list):
     return vars_in_ckpt.values()
-  return vars_in_ckpt
+  return vars_in_ckpt, vars_incompatible_shapes
