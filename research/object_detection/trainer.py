@@ -347,6 +347,25 @@ def train(create_tensor_dict_fn,
     #     Tensor is a tuple. [0] is gradient, [1] is variable. Their names need not match
         # global_summaries.add(tf.summary.tensor_summary(name=tensors[0].op.name + 'VarName'+ tensors[1].name.replace(':0','__0'), tensor=tensors[0], summary_description=tensors[1].name))
 
+    for tensors in grads_and_vars:
+        gradient_tensor = tensors[0]
+        variable_tensor = tensors[1]
+        if len(gradient_tensor.shape) == 4:
+            normalize_factor = tf.cast(gradient_tensor.shape[0] * gradient_tensor.shape[1] * gradient_tensor.shape[2],
+                                       dtype=tf.float32)
+            sum_gradient_tensor = tf.reduce_sum(gradient_tensor, axis=[0, 1, 2]) / normalize_factor
+            global_summaries.add(tf.summary.tensor_summary(
+                name=gradient_tensor.op.name + 'VarName' + variable_tensor.name.replace(':0', '__0', ),
+                tensor=sum_gradient_tensor,
+                summary_description=variable_tensor.name
+                ))
+        else:
+            global_summaries.add(tf.summary.tensor_summary(
+                name=gradient_tensor.op.name + 'VarName' + variable_tensor.name.replace(':0', '__0', ),
+                tensor=gradient_tensor,
+                summary_description=variable_tensor.name
+            ))
+
     # Add the summaries from the first clone. These contain the summaries
     # created by model_fn and either optimize_clones() or _gather_clone_loss().
     summaries |= set(tf.get_collection(tf.GraphKeys.SUMMARIES,
@@ -388,7 +407,8 @@ def train(create_tensor_dict_fn,
         init_saver.restore(sess, train_config.fine_tune_checkpoint)
       init_fn = initializer_fn
 
-      print vars_incompatible_shapes
+
+
 
       # incompatible_shapes_assign_ops = []
       # for var_name, var in vars_incompatible_shapes.iteritems():
@@ -401,6 +421,7 @@ def train(create_tensor_dict_fn,
       #   sess.run(tf.global_variables_initializer())
       #   sess.run(incompatible_shapes_assign_ops)
     print "HERE"
+
     slim.learning.train(
         train_tensor,
         logdir=train_dir,

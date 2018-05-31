@@ -31,6 +31,7 @@ from object_detection.core import standard_fields as fields
 from object_detection.utils import ops as util_ops
 from object_detection.utils import variables_helper
 from deployment import model_deploy
+import numpy as np
 
 slim = tf.contrib.slim
 
@@ -389,9 +390,56 @@ def saveNewGraph(create_tensor_dict_fn,
       init_fn = initializer_fn
 
       incompatible_shapes_assign_ops = []
+      classes_to_fetch = [0,2,90]
       for var_name, var in vars_incompatible_shapes.iteritems():
-          slice_inds = tuple(slice(0,osi) for osi in var['tensor'].shape)
-          temp_op = tf.assign(ref=var['tensor'], value=var['value'][slice_inds])
+          print var_name
+          print var['tensor'].shape
+          slice_max = [int(osi) for osi in var['tensor'].shape]
+          last_inds = slice_max[-1]
+          num_elements_per_class = last_inds / 3 # 3 classes person, car and background
+          elements_indices = []
+
+          for classes in classes_to_fetch:
+            elements_indices.extend(range(classes*num_elements_per_class,(classes+1)*num_elements_per_class) )
+
+          if len(slice_max) > 1:
+              if len(slice_max) == 2:
+                value = var['value'][:,elements_indices]
+              elif len(slice_max) == 3:
+                  value = var['value'][:,:, elements_indices]
+              elif len(slice_max) == 4:
+                  value = var['value'][:,:,:,elements_indices]
+                  # Sanity Check
+                  # print "Sanity Check: Dimension 4"
+                  copied_value = value[:,:,0,1*num_elements_per_class:2*num_elements_per_class]
+                  orig_value = var['value'][:,:,0,2*num_elements_per_class:3*num_elements_per_class]
+
+                  assert (copied_value == orig_value).all()
+
+                  # Experiment: Average the weights of all the dropped classes and add to background class
+                  # avg_weights_of_other_classes = value[:,:,:,0*num_elements_per_class:1*num_elements_per_class]
+                  # for i in range(4,91):
+                  #     avg_weights_of_other_classes += var['value'][:,:,:,i*num_elements_per_class:(i+1)*num_elements_per_class] / (91-4)
+                  #
+                  # value[:,:,:,0*num_elements_per_class:1*num_elements_per_class] = avg_weights_of_other_classes
+          else:
+              # print "Sanity Check: Dimension 1"
+              value = var['value'][[elements_indices]]
+
+              # Experiment: Average the weights of all the dropped classes and add to background class
+              # avg_weights_of_other_classes = value[0*num_elements_per_class:1*num_elements_per_class]
+              # for i in range(4, 91):
+              #     avg_weights_of_other_classes += var['value'][i * num_elements_per_class:(i + 1) * num_elements_per_class] / (91 - 4)
+              # value[ 0 * num_elements_per_class:1 * num_elements_per_class] = avg_weights_of_other_classes
+              # Sanity Check
+
+              copied_value = value[1 * num_elements_per_class:2 * num_elements_per_class]
+              orig_value = var['value'][2 * num_elements_per_class:3 * num_elements_per_class]
+              assert (copied_value == orig_value).all()
+
+
+
+          temp_op = tf.assign(ref=var['tensor'], value=value)
           incompatible_shapes_assign_ops.append(temp_op)
 
       # with tf.Session(config=session_config) as sess:

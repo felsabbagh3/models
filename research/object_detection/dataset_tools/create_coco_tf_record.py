@@ -262,11 +262,11 @@ def main(_):
       FLAGS.val_image_dir,
       val_output_path,
       FLAGS.include_masks)
-  _create_tf_record_from_coco_annotations(
-      FLAGS.testdev_annotations_file,
-      FLAGS.test_image_dir,
-      testdev_output_path,
-      FLAGS.include_masks)
+  # _create_tf_record_from_coco_annotations(
+  #     FLAGS.testdev_annotations_file,
+  #     FLAGS.test_image_dir,
+  #     testdev_output_path,
+  #     FLAGS.include_masks)
 
 
 if __name__ == '__main__':
