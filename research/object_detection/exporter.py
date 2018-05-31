@@ -203,10 +203,12 @@ def freeze_graph_with_def_protos(
                   threshold = avg_grad_sorted[int(count * pruning_ratio)]
                   value_mask_filters = (np.abs(avg_grad) >= threshold) * 1
 
-                  print tensor
-                  print avg_grad_sorted.shape
-                  print tensor.shape
-                  print value_mask_filters
+                  # print tensor
+                  # print avg_grad_sorted.shape
+                  # print tensor.shape
+                  # print value_mask_filters
+
+                  value_mask = value_mask_filters
 
                   if len(tensor.shape) == 4:
                     value_mask = value_mask_filters[np.newaxis, np.newaxis, np.newaxis, :]
@@ -216,10 +218,11 @@ def freeze_graph_with_def_protos(
                     value_mask = np.repeat(value_mask, [in_channels], axis=2)
                     params_layer_before = kW * kH * in_channels * out_channels
                     params_layer_after = kW * kH * in_channels * np.sum(value_mask_filters)
-                    print value_mask[:,:,0,0]
-                    print value_mask[:,:,0,100]
-                    print value_mask[:,:,0,250]
-                  exit()
+                    # if out_channels > 1:
+                    #     print value_mask[:,:,0,0]
+                    #     print value_mask[:,:,0,63]
+                    #     print value_mask[:,:,0,16]
+                    #     exit()
 
               else:
                   tensor_value_sorted = np.sort(np.abs(tensor_value).flatten())

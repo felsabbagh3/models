@@ -102,8 +102,6 @@ if __name__ == '__main__':
         print "Fetching gradients from path: {}".format(path)
         getGradDict(path, grad_dict)
 
-    print grad_dict
-
     # Save the file with all the gradients
 
     with gzip.GzipFile(savepath, 'wb') as fid:
