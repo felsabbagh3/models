@@ -43,10 +43,40 @@ def filter_variables(variables, filter_regex_list, invert=False):
   """
   kept_vars = []
   variables_to_ignore_patterns = list(filter(None, filter_regex_list))
+  print filter_regex_list
   for var in variables:
     add = True
     for pattern in variables_to_ignore_patterns:
       if re.match(pattern, var.op.name):
+        add = False
+        break
+    if add != invert:
+      kept_vars.append(var)
+  return kept_vars
+
+def filter_variables_search(variables, filter_regex_list, invert=False):
+  """Filters out the variables matching the filter_regex.
+
+  Filter out the variables whose name matches the any of the regular
+  expressions in filter_regex_list and returns the remaining variables.
+  Optionally, if invert=True, the complement set is returned.
+
+  Args:
+    variables: a list of tensorflow variables.
+    filter_regex_list: a list of string regular expressions.
+    invert: (boolean).  If True, returns the complement of the filter set; that
+      is, all variables matching filter_regex are kept and all others discarded.
+
+  Returns:
+    a list of filtered variables.
+  """
+  kept_vars = []
+  variables_to_ignore_patterns = list(filter(None, filter_regex_list))
+  print filter_regex_list
+  for var in variables:
+    add = True
+    for pattern in variables_to_ignore_patterns:
+      if re.search(pattern, var.op.name):
         add = False
         break
     if add != invert:
@@ -88,11 +118,32 @@ def freeze_gradients_matching_regex(grads_and_vars, regex_list):
       contain the variables and gradients matching the regex.
   """
   variables = [pair[1] for pair in grads_and_vars]
-  matching_vars = filter_variables(variables, regex_list, invert=True)
+  matching_vars = filter_variables_search(variables, regex_list, invert=True)
   kept_grads_and_vars = [pair for pair in grads_and_vars
                          if pair[1] not in matching_vars]
   for var in matching_vars:
+    print('Freezing variable [%s]', var.op.name)
     logging.info('Freezing variable [%s]', var.op.name)
+  return kept_grads_and_vars
+
+def dump_gradients_matching_regex(grads_and_vars, regex_list):
+  """Freeze gradients whose variable names match a regular expression.
+
+  Args:
+    grads_and_vars: A list of gradient to variable pairs (tuples).
+    regex_list: A list of string regular expressions.
+
+  Returns:
+    grads_and_vars: A list of gradient to variable pairs (tuples) that do not
+      contain the variables and gradients matching the regex.
+  """
+  variables = [pair[1] for pair in grads_and_vars]
+  matching_vars = filter_variables_search(variables, regex_list, invert=False)
+  kept_grads_and_vars = [pair for pair in grads_and_vars
+                         if pair[1] not in matching_vars]
+  for var in matching_vars:
+    print('Not Dumping gradient [%s]', var.op.name)
+    logging.info('Not Dumping variable [%s]', var.op.name)
   return kept_grads_and_vars
 
 
