@@ -64,7 +64,8 @@ def getGradDict(path, grad_dict):
     import operator
     from pprint import pprint
     x = False
-    tensors = {}
+    tensors_grad  = {}
+    tensors_count = {}
 
     summary_iterator = ExceptionHandlingIterator(tf.train.summary_iterator(path))
 
@@ -73,45 +74,19 @@ def getGradDict(path, grad_dict):
             if v.tag:
                 if "_FARES_" in v.tag:
                     x = True
-                    value = np.frombuffer(v.tensor.tensor_content, dtype=np.float32)
-                    if v.tag in tensors.keys():
-                        tensors[v.tag]['grad']  += value[0]
-                        tensors[v.tag]['count'] += 1
+                    value = abs(np.frombuffer(v.tensor.tensor_content, dtype=np.float32)[0])
+                    if v.tag in tensors_grad.keys():
+                        tensors_grad[v.tag]  += value
+                        tensors_count[v.tag] += 1
                     else:
-                        tensors[v.tag]          = {}
-                        tensors[v.tag]['grad']  = value[0]
-                        tensors[v.tag]['count'] = 1
-                    # print "************************************"
-            # if v.tensor:
-                # if "VarNameRank" in v.tag:
-                #     continue
-                # elif "VarName" in v.tag:  # == 'gradients/FeatureExtractor/MobilenetV1/Conv2d_13_pointwise_2_Conv2d_3_3x3_s2_256/BatchNorm/batchnorm/mul_grad/tuple/control_dependency_1VarNameFeatureExtractor/MobilenetV1/Conv2d_13_pointwise_2_Conv2d_3_3x3_s2_256/BatchNorm/gamma__0':
-                #     # Get The Tensor   Names
-                #     tag = v.tag.replace("__0", ":0")
-                #     _, variable_tensor_name = tag.split("VarName")
-                #
-                #     # Get the Gradient for that particular tensor
-                #     grad = np.frombuffer(v.tensor.tensor_content, dtype=np.float32)
-                #     shape = []
-                #     for d in v.tensor.tensor_shape.dim:
-                #         shape.append(d.size)
-                #     grad = grad.reshape(shape)
-                #
-                #     if grad_dict.get(variable_tensor_name, None) is None:
-                #         grad_dict[variable_tensor_name] = {
-                #             'varname': variable_tensor_name,
-                #             'count': 1,
-                #             'sum_grad': grad
-                #         }
-                #     else:
-                #         assert grad_dict[variable_tensor_name]['sum_grad'].shape == grad.shape
-                #
-                #         grad_dict[variable_tensor_name]['count'] += 1
-                #         grad_dict[variable_tensor_name]['sum_grad'] += grad
+                        tensors_grad[v.tag]  = value
+                        tensors_count[v.tag] = 1
 
     if x:
-        # sorted_x = sorted(tensors.items(), key=operator.itemgetter(1))
-        pprint(tensors)
+        sorted_x = sorted(tensors_grad.items(), key=operator.itemgetter(1))
+        for i in sorted_x[::-1]:
+            print(i)
+        print("***************************")
         exit()
 
     return grad_dict

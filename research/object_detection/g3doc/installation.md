@@ -86,6 +86,7 @@ tensorflow/models/research/:
 
 ``` bash
 # From tensorflow/models/research/
+# export PYTHONPATH=$PYTHONPATH:/home/felsabbagh3/Desktop/models/research:/home/felsabbagh3/Desktop/models/research/slim
 export PYTHONPATH=$PYTHONPATH:`pwd`:`pwd`/slim
 ```
 

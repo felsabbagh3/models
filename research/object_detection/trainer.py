@@ -445,7 +445,7 @@ def train(create_tensor_dict_fn,
             tensor=value_list[filter_i],
             summary_description=filter_list[filter_i][0] + '_FARES_' + filter_list[filter_i][1]
         ))
-
+    #
     print "Fares out"
 
     # Add the summaries from the first clone. These contain the summaries
