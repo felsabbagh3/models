@@ -6,6 +6,7 @@ import argparse
 import cPickle as pickle
 import gzip
 import glob
+import operator
 
 
 def parse_args():
@@ -55,17 +56,15 @@ class ExceptionHandlingIterator(object):
             return self.next()
 
 
-def getGradDict(path, grad_dict):
-    if bool(grad_dict) is False:
+def getGradDict(path, tensors_grad, tensors_count):
+    if bool(tensors_grad) is False:
         print "Empty Dictionary"
     else:
         print "Appending to Existing Dictionary"
 
-    import operator
-    from pprint import pprint
+    # import operator
+    # from pprint import pprint
     x = False
-    tensors_grad  = {}
-    tensors_count = {}
 
     summary_iterator = ExceptionHandlingIterator(tf.train.summary_iterator(path))
 
@@ -82,14 +81,15 @@ def getGradDict(path, grad_dict):
                         tensors_grad[v.tag]  = value
                         tensors_count[v.tag] = 1
 
-    if x:
-        sorted_x = sorted(tensors_grad.items(), key=operator.itemgetter(1))
-        for i in sorted_x[::-1]:
-            print(i)
-        print("***************************")
-        exit()
+    # if x:
+    #     sorted_x = sorted(tensors_grad.items(), key=operator.itemgetter(1))
+    #     for filter_name, filter_grad in sorted_x[::1]:
+    #         filter_avg = filter_grad / tensors_count[filter_name]
+    #         print("{}   :  {}".format(filter_name, filter_avg))
+    #     print("***************************")
+    #     exit()
 
-    return grad_dict
+    # return grad_dict
 
 
 if __name__ == '__main__':
@@ -100,12 +100,18 @@ if __name__ == '__main__':
     path = args.eventDir
     eventList = sorted(glob.glob(os.path.join(os.path.abspath(path), 'events.out*')))
 
-    grad_dict = {}
+    tensors_grad  = {}
+    tensors_count = {}
     savepath = os.path.dirname(path) + '/gradients.gz'
 
     for path in eventList:
         print "Fetching gradients from path: {}".format(path)
-        getGradDict(path, grad_dict)
+        getGradDict(path, tensors_grad, tensors_count)
+
+    sorted_x = sorted(tensors_grad.items(), key=operator.itemgetter(1))
+    for filter_name, filter_grad in sorted_x[::1]:
+        filter_avg = filter_grad / tensors_count[filter_name]
+        print("{}   :  {}".format(filter_name, filter_avg))
 
     # Save the file with all the gradients
 
