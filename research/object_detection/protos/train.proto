@@ -106,7 +106,4 @@ message TrainConfig {
   // dictionary, so that they can be displayed in Tensorboard. Note that this
   // will lead to a larger memory footprint.
   optional bool retain_original_images = 23 [default=false];
-
-  // Variables whose gradients should be dumped during training.
-  repeated string dump_gradients = 25;
 }
