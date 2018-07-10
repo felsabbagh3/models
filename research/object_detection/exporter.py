@@ -151,53 +151,6 @@ def freeze_graph_with_def_protos(
 
               if gradient_based is True:
                   # Average the gradient
-                  avg_grad = value['sum_grad']/value['count']
-                  # if len(avg_grad.shape) == 4: # Conv Layer Pruning - Drop Entire Filters
-                  #     print "Conv Pruning"
-                  #     kW, kH, in_channels, out_channels =avg_grad.shape
-                  #     print value['varname']
-                  #     print avg_grad.shape
-                  #     avg_grad_sum_filters = np.sum(avg_grad,axis=(0,1,2))
-                  #     print avg_grad_sum_filters.shape
-                  #     # Sort the gradients
-                  #     avg_grad_sorted = np.sort(np.abs(avg_grad_sum_filters).flatten())
-                  #     # Get value corresponding to pruning ratio
-                  #     count = avg_grad_sorted.shape[0]
-                  #     threshold = avg_grad_sorted[int(count*pruning_ratio)]
-                  #     # Get mask
-                  #     value_mask_filters = (np.abs(avg_grad_sum_filters) >= threshold) * 1
-                  #     # print value_mask[0]
-                  #     # print value_mask[100]
-                  #     # print value_mask[250]
-                  #     value_mask = value_mask_filters[np.newaxis, np.newaxis, np.newaxis, :]
-                  #     value_mask = np.repeat(value_mask, [kW], axis=0)
-                  #     value_mask = np.repeat(value_mask, [kH], axis=1)
-                  #     value_mask = np.repeat(value_mask, [in_channels], axis=2)
-                  #
-                  #     params_layer_before = kW * kH * in_channels * out_channels
-                  #     params_layer_after = kW * kH * in_channels * np.sum(value_mask_filters)
-                  #
-                  #
-                  #
-                  #     # print value_mask[:, :, 0, 0]
-                  #     # print value_mask[:, :, 100, 0]
-                  #     # print value_mask[:, :, 250, 0]
-                  #     # return
-                  # elif len(avg_grad.shape) == 2: # Fully Connected - Pruning Synapses
-                  #     print "Fully Connected Pruning"
-                  #     print value['varname']
-                  #     print avg_grad.shape
-                  #     # Sort the gradients
-                  #     avg_grad_sorted = np.sort(np.abs(avg_grad).flatten())
-                  #     # Get value corresponding to pruning ratio
-                  #     count = avg_grad_sorted.shape[0]
-                  #     threshold = avg_grad_sorted[int(count*pruning_ratio)]
-                  #     # Get mask
-                  #     value_mask = (np.abs(avg_grad) >= threshold) * 1
-                  # else:
-                  #     value_mask = np.ones(avg_grad.shape,dtype=np.float32)
-                  #     params_layer_before = avg_grad.shape[0]
-                  #     params_layer_after = avg_grad.shape[0]
                   if len(tensor.shape) == 4:
                       avg_grad_sorted = np.sort(np.abs(avg_grad).flatten())
                       count = avg_grad_sorted.shape[0]
@@ -242,8 +195,8 @@ def freeze_graph_with_def_protos(
               tensor_value = sess.run(tensor)
               assert (tensor_value == tensor_value_masked).all()
 
-              params_before += params_layer_before
-              params_after += params_layer_after
+              # params_before += params_layer_before
+              # params_after += params_layer_after
 
       # print params_before
       # print params_after

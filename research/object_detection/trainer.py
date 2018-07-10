@@ -386,44 +386,63 @@ def train(create_tensor_dict_fn,
     normalized_gradient_dict = {}
     import datetime
     s = datetime.datetime.now()
+
+
     for tensors in grads_and_vars:
-        gradient_tensor = tensors[0]
-        variable_tensor = tensors[1]
-        if "BatchNorm" not in variable_tensor.name:
-            activation_tensor = op_dict[variable_tensor.name][0]
-            gradient_wrt_activation = tf.gradients(total_loss,
-                                                   activation_tensor,
-                                                   colocate_gradients_with_ops=False)[0]
-            count_grad += 1
-        else:
-            continue
+        print "\t{}".format(tensors[0].name)
 
-        if len(gradient_wrt_activation.shape) == 4:
-            # rank_tensors = tf.shape(gradient_wrt_activation)
-            rank_tensors = gradient_wrt_activation.get_shape()
+    # exit()
 
-            normalize_factor = tf.cast(
-                rank_tensors[0] * rank_tensors[1] * rank_tensors[2],
-                dtype=tf.float32)
+    with tf.device('/gpu:0'):
 
-            activation_mult_grad = gradient_wrt_activation * activation_tensor
-            sum_gradient_tensor = tf.reduce_sum(activation_mult_grad, axis=[0, 1, 2])  # Why are we only summing 0,1,2
+        for tensors in grads_and_vars:
+            total_start = datetime.datetime.now()
+            gradient_tensor = tensors[0]
+            variable_tensor = tensors[1]
 
-            normalized_gradient_tensor = sum_gradient_tensor / normalize_factor
-            #
-            # global_summaries.add(tf.summary.tensor_summary(
-            #     name='VarName' + variable_tensor.name.replace(':0', '__0'),
-            #     tensor=normalized_gradient_tensor,
-            #     summary_description=variable_tensor.name
-            # ))
+            if "BatchNorm" not in variable_tensor.name:
+                activation_tensor = op_dict[variable_tensor.name][0]
 
-            normalized_gradient_dict[variable_tensor.name] = {
-                                                                      'tensor': normalized_gradient_tensor,
-                                                                          'kW': gradient_wrt_activation.shape[0],
-                                                                          'kH': gradient_wrt_activation.shape[1],
-                                                                 'in_channels': gradient_wrt_activation.shape[2],
-                                                                'out_channels': gradient_wrt_activation.shape[3]
-                                                              }
+                start = datetime.datetime.now()
+                gradient_wrt_activation = tf.gradients(total_loss,
+                                                       activation_tensor,
+                                                       colocate_gradients_with_ops=False)[0]
+                print "gradient_wrt_activation TOOK {}".format(datetime.datetime.now() - start)
+
+                count_grad += 1
+            else:
+                continue
+
+            if len(gradient_wrt_activation.shape) == 4:
+                # rank_tensors = tf.shape(gradient_wrt_activation)
+                rank_tensors = gradient_wrt_activation.get_shape()
+
+                normalize_factor = tf.cast(
+                    rank_tensors[0] * rank_tensors[1] * rank_tensors[2],
+                    dtype=tf.float32)
+
+                start = datetime.datetime.now()
+                activation_mult_grad = gradient_wrt_activation * activation_tensor
+                sum_gradient_tensor = tf.reduce_sum(activation_mult_grad, axis=[0, 1, 2])  # Why are we only summing 0,1,2
+
+                normalized_gradient_tensor = sum_gradient_tensor / normalize_factor
+                print "normalized_gradient_tensor TOOK {}".format(datetime.datetime.now() - start)
+
+                #
+                # global_summaries.add(tf.summary.tensor_summary(
+                #     name='VarName' + variable_tensor.name.replace(':0', '__0'),
+                #     tensor=normalized_gradient_tensor,
+                #     summary_description=variable_tensor.name
+                # ))
+
+                normalized_gradient_dict[variable_tensor.name] = {
+                                                                          'tensor': normalized_gradient_tensor,
+                                                                              'kW': gradient_wrt_activation.shape[0],
+                                                                              'kH': gradient_wrt_activation.shape[1],
+                                                                     'in_channels': gradient_wrt_activation.shape[2],
+                                                                    'out_channels': gradient_wrt_activation.shape[3]
+                                                                  }
+            print "total TOOK {}".format(datetime.datetime.now() - total_start)
 
     diff = datetime.datetime.now() - s
     print "total time: {}".format(diff)
@@ -436,8 +455,8 @@ def train(create_tensor_dict_fn,
             filter_list.append([varname.replace(':0', '__0'), str(filter_i)])
             value_list.append(avg_grad[filter_i])
 
-    # print("Total number of filters: {}".format(len(value_list)))
-    # print('VarName' + filter_list[783][0] + '#' + filter_list[783][1])
+    print("Total number of filters: {}".format(len(value_list)))
+    print('VarName' + filter_list[783][0] + '#' + filter_list[783][1])
 
     for filter_i in range(len(value_list)):
         global_summaries.add(tf.summary.tensor_summary(
@@ -445,7 +464,7 @@ def train(create_tensor_dict_fn,
             tensor=value_list[filter_i],
             summary_description=filter_list[filter_i][0] + '_FARES_' + filter_list[filter_i][1]
         ))
-    #
+
     print "Fares out"
 
     # Add the summaries from the first clone. These contain the summaries
