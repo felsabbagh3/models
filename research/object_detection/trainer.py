@@ -326,6 +326,103 @@ def train(create_tensor_dict_fn,
           grads_and_vars = slim.learning.clip_gradient_norms(
               grads_and_vars, train_config.gradient_clipping_by_norm)
 
+      print ("Fares: Actual pruning")
+      # p = 'BoxPredictor_5/ClassPredictor/biases:0'
+      # for t in grads_and_vars:
+      #     g = t[0].name
+      #     v = t[1].name
+      #     if (v == p):
+      #         print t[1].get_shape()
+      #
+      # exit()
+      from pprint import pprint
+      dire = "mytrain/ssd_mobilenetv2_reducedcoco/pruneDict.gz"
+      with gzip.GzipFile(dire, 'r') as fid:
+          prune_dict = pickle.loads(fid.read())
+
+      new_grads_and_vars = []
+
+      should_prune = len(prune_dict)
+      actual_prune = 0
+
+      for tensors in grads_and_vars:
+        gradient_tensor = tensors[0]
+        variable_tensor = tensors[1]
+        if ("BatchNorm" not in gradient_tensor.name):
+            print "Gradient Name: {}".format(gradient_tensor.name)
+
+            dim = gradient_tensor.get_shape()
+
+            if (len(dim) > 3) and (variable_tensor.name in prune_dict.keys()):
+                prune_layers = prune_dict[variable_tensor.name]
+                x, y, inc, outc = dim
+                print "************************************"
+                print "{},{},{},{}".format(x, y, inc, outc)
+
+                ones  = tf.ones([x, y, inc, 1], gradient_tensor.dtype)
+                zeros = tf.zeros([x, y, inc, 1], gradient_tensor.dtype)
+
+                if (0 in prune_layers):
+                    mask = zeros
+                else:
+                    mask = ones
+
+                for curr_layer in range(1, outc):
+                    if curr_layer in prune_layers:
+                        mask = tf.concat([mask, zeros], axis=3)
+                    else:
+                        mask = tf.concat([mask, ones], axis=3)
+
+                dim = mask.get_shape()
+                x, y, inc, outc = dim
+                print "{},{},{},{}".format(x, y, inc, outc)
+                print "***********************************"
+
+                masked_gradient = tf.multiply(mask, gradient_tensor, "masked/" + gradient_tensor.name.replace(":0", ""))
+                # masked_gradient = gradient_tensor * 0.0
+                print "mask name: {}".format(masked_gradient.name)
+
+                new_grads_and_vars.append([masked_gradient, variable_tensor])
+                prune_dict.pop(variable_tensor.name)
+                actual_prune += 1
+            elif (len(dim) == 1) and (variable_tensor.name in prune_dict.keys()):
+                x = dim[0]
+                print "*************************************"
+                print "{}".format(x)
+
+                prune_layers = prune_dict[variable_tensor.name]
+                one  = tf.ones([1], gradient_tensor.dtype)
+                zero = tf.zeros([1], gradient_tensor.dtype)
+
+                if (0 in prune_layers):
+                    mask = zero
+                else:
+                    mask = one
+
+                for curr_layer in range(1, x):
+                    if curr_layer in prune_layers:
+                        mask = tf.concat([mask, zero], axis=0)
+                    else:
+                        mask = tf.concat([mask, one], axis=0)
+
+                print "{}".format(mask.get_shape())
+                print "**************************"
+                masked_gradient = tf.multiply(mask, gradient_tensor, "masked/" + gradient_tensor.name.replace(":0", ""))
+                new_grads_and_vars.append([masked_gradient, variable_tensor])
+                prune_dict.pop(variable_tensor.name)
+                actual_prune += 1
+        else:
+            new_grads_and_vars.append([gradient_tensor, variable_tensor])
+
+      grads_and_vars = new_grads_and_vars
+
+      print "Should: {} \tActual: {}".format(should_prune, actual_prune)
+
+      pprint(prune_dict)
+
+      print ("Fares: Actual Pruning out")
+
+
       # Create gradient updates.
       grad_updates = training_optimizer.apply_gradients(grads_and_vars,
                                                         global_step=global_step)
@@ -350,122 +447,113 @@ def train(create_tensor_dict_fn,
         # global_summaries.add(tf.summary.tensor_summary(name=tensors[0].op.name + 'VarName'+ tensors[1].name.replace(':0','__0'), tensor=tensors[0], summary_description=tensors[1].name))
 
 
-    print(" FARES: I GOT HERE")
-    from pprint import pprint
 
-    # with gzip.open('grad_activation_map.gz', 'r') as f:
-    #     grad_activation_map = pickle.loads(f.read())
-    # if train_config.dump_gradients:
-    # all_op_tensors = [[n.name, n.input] for n in tf.get_default_graph().as_graph_def().node if n.op == 'Conv2D']
-    all_op_tensors = []
-    for n in tf.get_default_graph().as_graph_def().node:
-        if "L2Loss" not in n.op:
-            first_path = n.name.split("/", 1)[0]
-            if ('FeatureExtractor' in first_path) or ("BoxPredictor" in first_path):
-                curr_n = [n.name, n.input]
-                all_op_tensors.append(curr_n)
-    op_dict = {}
-
-    for ops in all_op_tensors:
-        op_name = ops[0]
-        op = tf.get_default_graph().get_operation_by_name(op_name)
-        op_node_def = op.node_def
-        if len(op_node_def.input) > 1:
-            weight_name = op_node_def.input[1].encode('ascii').replace('/read', ':0')
-        elif len(op_node_def.input) > 1:
-            weight_name = op_node_def.input[0].encode('ascii').replace('/read', ':0')
-        else:
-            weight_name = "-1"
-        output_tensor = op.values()
-        if (weight_name != "-1") and ("BatchNorm" not in weight_name):
-            op_dict[weight_name] = output_tensor
-
-    count_grad = 0
-    gradient_dictionary = {}
-
-    normalized_gradient_dict = {}
-    import datetime
-    s = datetime.datetime.now()
-
-
-    for tensors in grads_and_vars:
-        print "\t{}".format(tensors[0].name)
-
-    # exit()
-
-    with tf.device('/gpu:0'):
-
-        for tensors in grads_and_vars:
-            total_start = datetime.datetime.now()
-            gradient_tensor = tensors[0]
-            variable_tensor = tensors[1]
-
-            if "BatchNorm" not in variable_tensor.name:
-                activation_tensor = op_dict[variable_tensor.name][0]
-
-                start = datetime.datetime.now()
-                gradient_wrt_activation = tf.gradients(total_loss,
-                                                       activation_tensor,
-                                                       colocate_gradients_with_ops=False)[0]
-                print "gradient_wrt_activation TOOK {}".format(datetime.datetime.now() - start)
-
-                count_grad += 1
-            else:
-                continue
-
-            if len(gradient_wrt_activation.shape) == 4:
-                # rank_tensors = tf.shape(gradient_wrt_activation)
-                rank_tensors = gradient_wrt_activation.get_shape()
-
-                normalize_factor = tf.cast(
-                    rank_tensors[0] * rank_tensors[1] * rank_tensors[2],
-                    dtype=tf.float32)
-
-                start = datetime.datetime.now()
-                activation_mult_grad = gradient_wrt_activation * activation_tensor
-                sum_gradient_tensor = tf.reduce_sum(activation_mult_grad, axis=[0, 1, 2])  # Why are we only summing 0,1,2
-
-                normalized_gradient_tensor = sum_gradient_tensor / normalize_factor
-                print "normalized_gradient_tensor TOOK {}".format(datetime.datetime.now() - start)
-
-                #
-                # global_summaries.add(tf.summary.tensor_summary(
-                #     name='VarName' + variable_tensor.name.replace(':0', '__0'),
-                #     tensor=normalized_gradient_tensor,
-                #     summary_description=variable_tensor.name
-                # ))
-
-                normalized_gradient_dict[variable_tensor.name] = {
-                                                                          'tensor': normalized_gradient_tensor,
-                                                                              'kW': gradient_wrt_activation.shape[0],
-                                                                              'kH': gradient_wrt_activation.shape[1],
-                                                                     'in_channels': gradient_wrt_activation.shape[2],
-                                                                    'out_channels': gradient_wrt_activation.shape[3]
-                                                                  }
-            print "total TOOK {}".format(datetime.datetime.now() - total_start)
-
-    diff = datetime.datetime.now() - s
-    print "total time: {}".format(diff)
-    print "The final count is: {}".format(count_grad)
-    filter_list = []
-    value_list = []
-    for varname, variable_dict in normalized_gradient_dict.iteritems():
-        avg_grad = variable_dict['tensor']
-        for filter_i in range(variable_dict['out_channels']):
-            filter_list.append([varname.replace(':0', '__0'), str(filter_i)])
-            value_list.append(avg_grad[filter_i])
-
-    print("Total number of filters: {}".format(len(value_list)))
-    print('VarName' + filter_list[783][0] + '#' + filter_list[783][1])
-
-    for filter_i in range(len(value_list)):
-        global_summaries.add(tf.summary.tensor_summary(
-            name='VarName' + filter_list[filter_i][0] + '_FARES_' + filter_list[filter_i][1],
-            tensor=value_list[filter_i],
-            summary_description=filter_list[filter_i][0] + '_FARES_' + filter_list[filter_i][1]
-        ))
-
-    print "Fares out"
+    # print(" FARES: I GOT HERE")
+    #
+    # # with gzip.open('grad_activation_map.gz', 'r') as f:
+    # #     grad_activation_map = pickle.loads(f.read())
+    # # if train_config.dump_gradients:
+    # # all_op_tensors = [[n.name, n.input] for n in tf.get_default_graph().as_graph_def().node if n.op == 'Conv2D']
+    # all_op_tensors = []
+    # for n in tf.get_default_graph().as_graph_def().node:
+    #     if "L2Loss" not in n.op:
+    #         first_path = n.name.split("/", 1)[0]
+    #         if ('FeatureExtractor' in first_path) or ("BoxPredictor" in first_path):
+    #             curr_n = [n.name, n.input]
+    #             all_op_tensors.append(curr_n)
+    # op_dict = {}
+    #
+    # for ops in all_op_tensors:
+    #     op_name = ops[0]
+    #     op = tf.get_default_graph().get_operation_by_name(op_name)
+    #     op_node_def = op.node_def
+    #     if len(op_node_def.input) > 1:
+    #         weight_name = op_node_def.input[1].encode('ascii').replace('/read', ':0')
+    #     elif len(op_node_def.input) > 1:
+    #         weight_name = op_node_def.input[0].encode('ascii').replace('/read', ':0')
+    #     else:
+    #         weight_name = "-1"
+    #     output_tensor = op.values()
+    #     if (weight_name != "-1") and ("BatchNorm" not in weight_name):
+    #         op_dict[weight_name] = output_tensor
+    #
+    # count_grad = 0
+    # gradient_dictionary = {}
+    #
+    # normalized_gradient_dict = {}
+    # import datetime
+    # s = datetime.datetime.now()
+    #
+    # with tf.device('/gpu:0'):
+    #
+    #     for tensors in grads_and_vars:
+    #         total_start = datetime.datetime.now()
+    #         gradient_tensor = tensors[0]
+    #         variable_tensor = tensors[1]
+    #
+    #         if "BatchNorm" not in variable_tensor.name:
+    #             activation_tensor = op_dict[variable_tensor.name][0]
+    #
+    #             start = datetime.datetime.now()
+    #             gradient_wrt_activation = tf.gradients(total_loss,
+    #                                                    activation_tensor,
+    #                                                    colocate_gradients_with_ops=True)[0]
+    #             print "gradient_wrt_activation TOOK {}".format(datetime.datetime.now() - start)
+    #
+    #             count_grad += 1
+    #         else:
+    #             continue
+    #
+    #         if len(gradient_wrt_activation.shape) == 4:
+    #             # rank_tensors = tf.shape(gradient_wrt_activation)
+    #             rank_tensors = gradient_wrt_activation.get_shape()
+    #
+    #             normalize_factor = tf.cast(
+    #                 rank_tensors[0] * rank_tensors[1] * rank_tensors[2],
+    #                 dtype=tf.float32)
+    #
+    #             start = datetime.datetime.now()
+    #             activation_mult_grad = gradient_wrt_activation * activation_tensor
+    #             sum_gradient_tensor = tf.reduce_sum(activation_mult_grad, axis=[0, 1, 2])
+    #
+    #             normalized_gradient_tensor = sum_gradient_tensor / normalize_factor
+    #             # print "normalized_gradient_tensor TOOK {}".format(datetime.datetime.now() - start)
+    #
+    #             #
+    #             # global_summaries.add(tf.summary.tensor_summary(
+    #             #     name='VarName' + variable_tensor.name.replace(':0', '__0'),
+    #             #     tensor=normalized_gradient_tensor,
+    #             #     summary_description=variable_tensor.name
+    #             # ))
+    #
+    #             normalized_gradient_dict[variable_tensor.name] = {
+    #                                                                       'tensor': normalized_gradient_tensor,
+    #                                                                           'kW': gradient_wrt_activation.shape[0],
+    #                                                                           'kH': gradient_wrt_activation.shape[1],
+    #                                                                  'in_channels': gradient_wrt_activation.shape[2],
+    #                                                                 'out_channels': gradient_wrt_activation.shape[3]
+    #                                                               }
+    #         print "total TOOK {}".format(datetime.datetime.now() - total_start)
+    #
+    # diff = datetime.datetime.now() - s
+    # print "total time: {}".format(diff)
+    # print "The final count is: {}".format(count_grad)
+    # filter_list = []
+    # value_list = []
+    # for varname, variable_dict in normalized_gradient_dict.iteritems():
+    #     avg_grad = variable_dict['tensor']
+    #     for filter_i in range(variable_dict['out_channels']):
+    #         filter_list.append([varname.replace(':0', '__0'), str(filter_i)])
+    #         value_list.append(avg_grad[filter_i])
+    #
+    # for filter_i in range(len(value_list)):
+    #     global_summaries.add(tf.summary.tensor_summary(
+    #         name='VarName' + filter_list[filter_i][0] + '_LAYER_' + filter_list[filter_i][1],
+    #         tensor=value_list[filter_i],
+    #         summary_description=filter_list[filter_i][0] + '_LAYER_' + filter_list[filter_i][1]
+    #     ))
+    #
+    # print "Fares out"
 
     # Add the summaries from the first clone. These contain the summaries
     # created by model_fn and either optimize_clones() or _gather_clone_loss().
