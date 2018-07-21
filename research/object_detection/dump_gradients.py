@@ -68,7 +68,7 @@ def getGradDict(path, tensors_grad, tensors_count):
     x = False
 
     summary_iterator = ExceptionHandlingIterator(tf.train.summary_iterator(path))
-
+    f = 0
     for summary in summary_iterator:
         for v in summary.summary.value:
             if v.tag:
@@ -82,6 +82,10 @@ def getGradDict(path, tensors_grad, tensors_count):
                         tensors_grad[v.tag]  = value
                         tensors_count[v.tag] = 1
 
+                        f += 1
+                        if (f % 50) == 0:
+                            print "F: {}".format(f)
+    print "Done with getGradDict"
     # return grad_dict
 
 
@@ -104,22 +108,30 @@ if __name__ == '__main__':
 
     sorted_filters = []
 
+    print "Starting sort_x process"
     sorted_x = sorted(tensors_grad.items(), key=operator.itemgetter(1))
     for filter_name, filter_grad in sorted_x[::-1]:
         filter_avg = filter_grad / tensors_count[filter_name]
         sorted_filters.append((filter_name, filter_avg))
         # print("{}   :  {}".format(filter_name, filter_avg))
 
+    print "Done with sort_x process"
+
+    print "About to save sorted_filters"
+
     with gzip.GzipFile(savepath, 'wb') as fid:
         fid.write(pickle.dumps(sorted_filters))
 
-    numPrune = int(len(sorted_filters) * 0.1)
+    print "Finished saving sorted filters"
+
+    print "About to start prune_list process"
+    numPrune = int(len(sorted_filters) * 0.15)
     prune_list = {}
     i = 0
     for rank, value in enumerate(sorted_filters):
         unprocessed_name, avg = value
-        unprocessed_name = unprocessed_name.replace("VarName", "")
-        unprocessed_name = unprocessed_name.replace("__0", ":0")
+        unprocessed_name      = unprocessed_name.replace("VarName", "")
+        unprocessed_name      = unprocessed_name.replace("__0", ":0")
         processed_name, layer = unprocessed_name.split("_LAYER_")
 
         if processed_name in prune_list.keys():
@@ -132,6 +144,10 @@ if __name__ == '__main__':
         if (i > numPrune):
             break
 
+    print "Done with prune list process and about to save it"
+
     pprint(prune_list)
     with gzip.GzipFile(savepath_pd, 'wb') as fid:
         fid.write(pickle.dumps(prune_list))
+
+    print "Done with everything!!"
