@@ -75,16 +75,22 @@ def getGradDict(path, tensors_grad, tensors_count):
                 if "_LAYER_" in v.tag:
                     x = True
                     value = abs(np.frombuffer(v.tensor.tensor_content, dtype=np.float32)[0])
-                    if v.tag in tensors_grad.keys():
-                        tensors_grad[v.tag]  += value
-                        tensors_count[v.tag] += 1
+                    tensors_grad_keys = tensors_grad.keys()
+                    if (f % 5000) == 0:
+                        print "F: {}".format(f)
+                    tag = v.tag
+                    # if (f >= 19800 - 2):
+                    #     print "tensors_grad_keys: {}, F: {}".format(len(tensors_grad_keys), f)
+                    #     print tag
+                    if tag in tensors_grad_keys:
+                        tensors_grad[tag]  += value
+                        tensors_count[tag] += 1
                     else:
-                        tensors_grad[v.tag]  = value
-                        tensors_count[v.tag] = 1
+                        tensors_grad[tag]  = value
+                        tensors_count[tag] = 1
 
-                        f += 1
-                        if (f % 50) == 0:
-                            print "F: {}".format(f)
+                    f += 1
+
     print "Done with getGradDict"
     # return grad_dict
 

@@ -326,97 +326,97 @@ def train(create_tensor_dict_fn,
           grads_and_vars = slim.learning.clip_gradient_norms(
               grads_and_vars, train_config.gradient_clipping_by_norm)
 
-      # print ("Fares: Actual pruning")
-      # from pprint import pprint
-      # dire = "mytrain/ssd_mobilenetv2_reducedcoco/pruneDict.gz"
-      # with gzip.GzipFile(dire, 'r') as fid:
-      #     prune_dict = pickle.loads(fid.read())
-      #
-      # new_grads_and_vars = []
-      #
-      # for tensors in grads_and_vars:
-      #   gradient_tensor = tensors[0]
-      #   variable_tensor = tensors[1]
-      #   if ("BatchNorm" not in gradient_tensor.name):
-      #       print "Gradient Name: {}".format(gradient_tensor.name)
-      #
-      #       dim = gradient_tensor.get_shape()
-      #
-      #       if (len(dim) > 3) and (variable_tensor.name in prune_dict.keys()):
-      #           prune_layers = prune_dict[variable_tensor.name]
-      #           x, y, inc, outc = dim
-      #           print "************************************"
-      #           print "{},{},{},{}".format(x, y, inc, outc)
-      #
-      #           ones  = tf.ones([x, y, inc, 1], gradient_tensor.dtype)
-      #           zeros = tf.zeros([x, y, inc, 1], gradient_tensor.dtype)
-      #
-      #           if (0 in prune_layers):
-      #               mask = zeros
-      #           else:
-      #               mask = ones
-      #
-      #
-      #           for curr_layer in range(1, outc):
-      #               if curr_layer in prune_layers:
-      #                   mask = tf.concat([mask, zeros], axis=3)
-      #               else:
-      #                   mask = tf.concat([mask, ones], axis=3)
-      #
-      #           dim = mask.get_shape()
-      #           x, y, inc, outc = dim
-      #           print "{},{},{},{}".format(x, y, inc, outc)
-      #           print "***********************************"
-      #
-      #           masked_gradient = tf.multiply(mask, gradient_tensor, "masked/" + gradient_tensor.name.replace(":0", ""))
-      #           print "mask name: {}".format(masked_gradient.name)
-      #
-      #           new_grads_and_vars.append([masked_gradient, variable_tensor])
-      #           prune_dict.pop(variable_tensor.name)
-      #           global_summaries.add(tf.summary.tensor_summary(
-      #               name=masked_gradient.name,
-      #               tensor=masked_gradient,
-      #               summary_description=masked_gradient.name
-      #           ))
-      #       elif (len(dim) == 1) and (variable_tensor.name in prune_dict.keys()):
-      #           x = dim[0]
-      #           print "*************************************"
-      #           print "{}".format(x)
-      #
-      #           prune_layers = prune_dict[variable_tensor.name]
-      #           one  = tf.ones([1], gradient_tensor.dtype)
-      #           zero = tf.zeros([1], gradient_tensor.dtype)
-      #
-      #           if (0 in prune_layers):
-      #               mask = zero
-      #           else:
-      #               mask = one
-      #
-      #           for curr_layer in range(1, x):
-      #               if curr_layer in prune_layers:
-      #                   mask = tf.concat([mask, zero], axis=0)
-      #               else:
-      #                   mask = tf.concat([mask, one], axis=0)
-      #
-      #           print "{}".format(mask.get_shape())
-      #           print "**************************"
-      #           masked_gradient = tf.multiply(mask, gradient_tensor, "masked/" + gradient_tensor.name.replace(":0", ""))
-      #           new_grads_and_vars.append([masked_gradient, variable_tensor])
-      #           prune_dict.pop(variable_tensor.name)
-      #           global_summaries.add(tf.summary.tensor_summary(
-      #               name=masked_gradient.name,
-      #               tensor=masked_gradient,
-      #               summary_description=masked_gradient.name
-      #           ))
-      #
-      #   else:
-      #       new_grads_and_vars.append([gradient_tensor, variable_tensor])
-      #
-      # grads_and_vars = new_grads_and_vars
-      #
-      # pprint(prune_dict)
-      #
-      # print ("Fares: Actual Pruning out")
+      print ("Fares: Actual pruning")
+      from pprint import pprint
+      dire = "mytrain/ssd_mobilenetv2_reducedcoco/pruneDict.gz"
+      with gzip.GzipFile(dire, 'r') as fid:
+          prune_dict = pickle.loads(fid.read())
+
+      new_grads_and_vars = []
+
+      for tensors in grads_and_vars:
+        gradient_tensor = tensors[0]
+        variable_tensor = tensors[1]
+        if ("BatchNorm" not in gradient_tensor.name):
+            print "Gradient Name: {}".format(gradient_tensor.name)
+
+            dim = gradient_tensor.get_shape()
+
+            if (len(dim) > 3) and (variable_tensor.name in prune_dict.keys()):
+                prune_layers = prune_dict[variable_tensor.name]
+                x, y, inc, outc = dim
+                print "************************************"
+                print "{},{},{},{}".format(x, y, inc, outc)
+
+                ones  = tf.ones([x, y, inc, 1], gradient_tensor.dtype)
+                zeros = tf.zeros([x, y, inc, 1], gradient_tensor.dtype)
+
+                if (0 in prune_layers):
+                    mask = zeros
+                else:
+                    mask = ones
+
+
+                for curr_layer in range(1, outc):
+                    if curr_layer in prune_layers:
+                        mask = tf.concat([mask, zeros], axis=3)
+                    else:
+                        mask = tf.concat([mask, ones], axis=3)
+
+                dim = mask.get_shape()
+                x, y, inc, outc = dim
+                print "{},{},{},{}".format(x, y, inc, outc)
+                print "***********************************"
+
+                masked_gradient = tf.multiply(mask, gradient_tensor, "masked/" + gradient_tensor.name.replace(":0", ""))
+                print "mask name: {}".format(masked_gradient.name)
+
+                new_grads_and_vars.append([masked_gradient, variable_tensor])
+                prune_dict.pop(variable_tensor.name)
+                global_summaries.add(tf.summary.tensor_summary(
+                    name=masked_gradient.name,
+                    tensor=masked_gradient,
+                    summary_description=masked_gradient.name
+                ))
+            elif (len(dim) == 1) and (variable_tensor.name in prune_dict.keys()):
+                x = dim[0]
+                print "*************************************"
+                print "{}".format(x)
+
+                prune_layers = prune_dict[variable_tensor.name]
+                one  = tf.ones([1], gradient_tensor.dtype)
+                zero = tf.zeros([1], gradient_tensor.dtype)
+
+                if (0 in prune_layers):
+                    mask = zero
+                else:
+                    mask = one
+
+                for curr_layer in range(1, x):
+                    if curr_layer in prune_layers:
+                        mask = tf.concat([mask, zero], axis=0)
+                    else:
+                        mask = tf.concat([mask, one], axis=0)
+
+                print "{}".format(mask.get_shape())
+                print "**************************"
+                masked_gradient = tf.multiply(mask, gradient_tensor, "masked/" + gradient_tensor.name.replace(":0", ""))
+                new_grads_and_vars.append([masked_gradient, variable_tensor])
+                prune_dict.pop(variable_tensor.name)
+                global_summaries.add(tf.summary.tensor_summary(
+                    name=masked_gradient.name,
+                    tensor=masked_gradient,
+                    summary_description=masked_gradient.name
+                ))
+
+        else:
+            new_grads_and_vars.append([gradient_tensor, variable_tensor])
+
+      grads_and_vars = new_grads_and_vars
+
+      pprint(prune_dict)
+
+      print ("Fares: Actual Pruning out")
 
 
       # Create gradient updates.
