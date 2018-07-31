@@ -123,83 +123,37 @@ def freeze_graph_with_def_protos(
 
 
       # Burhan - Modify graph before this
+      prune_path = "mytrain/ssd_mobilenetv2_reducedcoco/pruneDict.gz"
+      prune = True
       if prune is True:
           print "pruning graph"
           pruning_ratio = 0.10
           gradient_based = True
           with gzip.GzipFile(prune_path,'rb') as fid:
-              grad_dict = pickle.loads(fid.read())
+            prune_dict = pickle.loads(fid.read())
 
-          # for key, value in grad_dict.iteritems():
-          #     tensor = sess.graph.get_tensor_by_name(value['varname'])
-          #     print tensor.name
-          #     for node in child_graph:
-          #         for child in child_graph[node]:
-          #             print child.name
-          #             if tensor.name == child.name:
-          #                 print tensor.name
-          #                 print node.name
-          # return
 
-          for key,value in grad_dict.iteritems():
-              # Get weight values
-              tensor = sess.graph.get_tensor_by_name(value['varname'])
-              tensor_value = sess.run(tensor)
+          for tensors_to_be_pruned, prune_layers in prune_dict.items():
+            actual_tensor   = sess.graph.get_tensor_by_name(tensors_to_be_pruned)
+            x, y, inc, outc = actual_tensor.get_shape()
 
-              if "FeatureExtractor" not in value['varname']:
-                  continue
 
-              if gradient_based is True:
-                  # Average the gradient
-                  if len(tensor.shape) == 4:
-                      avg_grad_sorted = np.sort(np.abs(avg_grad).flatten())
-                      count = avg_grad_sorted.shape[0]
-                      threshold = avg_grad_sorted[int(count * pruning_ratio)]
-                      value_mask_filters = (np.abs(avg_grad) >= threshold) * 1
+            ones            = tf.ones([x, y, inc, 1], gradient_tensor.dtype)
+            zeros           = tf.zeros([x, y, inc, 1], gradient_tensor.dtype)
+            if (0 in prune_layers):
+                mask = zeros
+            else:
+                mask = ones
 
-                      # print tensor
-                      # print avg_grad_sorted.shape
-                      # print tensor.shape
-                      # print value_mask_filters
+            for curr_layer in range(1, outc):
+                if curr_layer in prune_layers:
+                    mask = tf.concat([mask, zeros], axis=3)
+                else:
+                    mask = tf.concat([mask, ones], axis=3)
 
-                      value_mask = value_mask_filters
-                  else:
-                      value_mask = np.ones(avg_grad.shape, dtype=np.float32)
+            tensor_masked = actual_tensor * mask
 
-                  if len(tensor.shape) == 4:
-                    value_mask = value_mask_filters[np.newaxis, np.newaxis, np.newaxis, :]
-                    kW, kH, in_channels, out_channels = tensor.shape
-                    value_mask = np.repeat(value_mask, [kW], axis=0)
-                    value_mask = np.repeat(value_mask, [kH], axis=1)
-                    value_mask = np.repeat(value_mask, [in_channels], axis=2)
-                    params_layer_before = kW * kH * in_channels * out_channels
-                    params_layer_after = kW * kH * in_channels * np.sum(value_mask_filters)
-                    # if out_channels > 1:
-                    #     print value_mask[:,:,0,0]
-                    #     print value_mask[:,:,0,63]
-                    #     print value_mask[:,:,0,16]
-                    #     exit()
-
-              else:
-                  tensor_value_sorted = np.sort(np.abs(tensor_value).flatten())
-                  count = tensor_value_sorted.shape[0]
-                  threshold = tensor_value_sorted[int(count*pruning_ratio)]
-                  value_mask = (np.abs(tensor_value) >= threshold) * 1
-
-              tensor_value_masked = value_mask * tensor_value
-              # Assign Masked Values
-              sess.run(tf.assign(tensor,tensor_value_masked))
-
-              # Double Check
-              tensor = sess.graph.get_tensor_by_name(value['varname'])
-              tensor_value = sess.run(tensor)
-              assert (tensor_value == tensor_value_masked).all()
-
-              # params_before += params_layer_before
-              # params_after += params_layer_after
-
-      # print params_before
-      # print params_after
+            sess.run(tf.assign(actual_tensor,tensor_masked))
 
       output_graph_def = graph_util.convert_variables_to_constants(
           sess,
